@@ -156,3 +156,28 @@ void get_filetype(char *filename,char *filetype)
 	else if (strstr(filename,".mpeg")) strcpy(filetype,"video/mpeg");
 	else strcpy(filetype,"text/html");
 }
+
+void feed_dynamic(int fd, char *filename, char *cgiargs) 
+{
+    char buf[MAXLINE], *emptylist[] = { NULL };
+    int pfd[2];
+
+    /* Return first part of HTTP response */
+    sprintf(buf, "HTTP/1.0 200 OK\r\n");
+    rio_writen(fd, buf, strlen(buf));
+    sprintf(buf, "Server: weblet Web Server\r\n");
+    rio_writen(fd, buf, strlen(buf));
+ 
+    pipe(pfd);
+    if (fork() == 0) {             /* child */
+	close(pfd[1]);
+        dup2(pfd[0],STDIN_FILENO);
+	dup2(fd, STDOUT_FILENO);         /* Redirect stdout to client */
+	execve(filename, emptylist, environ);    /* Run CGI program */
+    }
+
+    close(pfd[0]);
+    write(pfd[1], cgiargs, strlen(cgiargs)+1);
+    wait(NULL);                          /* Parent waits for and reaps child */
+    close(pfd[1]);
+}
