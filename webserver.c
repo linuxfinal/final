@@ -136,6 +136,19 @@ void feed_static(int fd,char *filename,int filesize)
 	munmap(srcp,filesize);
 }
 
+void parse_dynamic_uri(char *uri,char *filename,char *cgiargs)
+{
+	char *ptr;
+	ptr = index(uri,'?');
+	if(ptr){
+		strcpy(cgiargs,ptr+1);
+		*ptr='\0';
+	}else
+		strcpy(cgiargs,"");
+	strcpy(filename,".");
+	strcat(filename,uri);
+}
+
 void get_filetype(char *filename,char *filetype)
 {
 	if(strstr(filename,".html")) strcpy(filetype,"text/html");
