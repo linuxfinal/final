@@ -80,3 +80,32 @@ int is_static(char *uri)
 	else
 		return 0;
 }
+
+void error_request(int fd,char *cause,char *errnum,char *shortmsg, char *description)
+{
+	char buf[MAXLINE],body[MAXBUF];
+	sprintf(body,"<html><title>error request</title>");
+	sprintf(body,"%s<body bgcolor=""ffffff"">\r\n",body);
+	sprintf(body,"%s%s:%s\r\n",body,errnum,shortmsg);
+	sprintf(body,"%s<p>%s:%s\r\n",body,description,cause);
+	sprintf(body,"%s<hr><em>weblet Web server</em>\r\n",body);
+
+	sprintf(buf,"HTTP/1.0 %s%s\r\n",errnum,shortmsg);
+	rio_writen(fd,buf,strlen(buf));
+	sprintf(buf,"Content-type:text/html\r\n");
+	rio_writen(fd,buf,strlen(buf));
+	sprintf(buf,"Content-length:%d\r\n\r\n",(int)strlen(body));
+	rio_writen(fd,buf,strlen(buf));
+	rio_writen(fd,body,strlen(body));
+}
+
+void read_requesthdrs(rio_t *rp)
+{
+	char buf[MAXLINE];
+	rio_readlineb(rp,buf,MAXLINE);
+	while(strcmp(buf,"\r\n")){
+		printf("%s",buf);
+		rio_readlineb(rp,buf,MAXLINE);
+	}
+	return;
+}
