@@ -46,8 +46,8 @@ void *process_trans(void *vargp)//()
 	rio_readlineb(&rio,buf,MAXLINE);
 	sscanf(buf,"%s%s%s",method,uri,version);
 	
-	if(strcasecmp(method,"GET")){
-		error_request(fd,method,"501","NOT Implemented","weblet does not implement this method");
+	if(strcasecmp(method,"GET") && strcasecmp(method, "POST")){
+		error_request(fd,method,"501","NOT Implemented","webserver does not implement this method");
 		//return;
 	}
 	
@@ -59,19 +59,19 @@ void *process_trans(void *vargp)//()
 		parse_dynamic_uri(uri,filename,cgiargs);
 	
 	if(stat(filename,&sbuf)<0){
-		error_request(fd,filename,"404","Not found","weblet could not find this file");
+		error_request(fd,filename,"404","Not found","webserver could not find this file");
 		//return;
 	}
 
 	if(static_flag){
 		if(!(S_ISREG(sbuf.st_mode))||!(S_IRUSR & sbuf.st_mode)){
-			error_request(fd,filename,"403","Forbidden","weblet is not permtted to read the file");
+			error_request(fd,filename,"403","Forbidden","webserver is not permtted to read the file");
 			//return;
 		}
 		feed_static(fd,filename,sbuf.st_size);
 	}else{
 		if(!(S_ISREG(sbuf.st_mode))||!(S_IXUSR & sbuf.st_mode)){
-			error_request(fd,filename,"403","Forbidden","weblet could not run the CGI program");
+			error_request(fd,filename,"403","Forbidden","webserver could not run the CGI program");
 			//return;
 		}
 		feed_dynamic(fd,filename,cgiargs);
@@ -94,7 +94,7 @@ void error_request(int fd,char *cause,char *errnum,char *shortmsg, char *descrip
 	sprintf(body,"%s<body bgcolor=""ffffff"">\r\n",body);
 	sprintf(body,"%s%s:%s\r\n",body,errnum,shortmsg);
 	sprintf(body,"%s<p>%s:%s\r\n",body,description,cause);
-	sprintf(body,"%s<hr><em>weblet Web server</em>\r\n",body);
+	sprintf(body,"%s<hr><em>webserver Web server</em>\r\n",body);
 
 	sprintf(buf,"HTTP/1.0 %s%s\r\n",errnum,shortmsg);
 	rio_writen(fd,buf,strlen(buf));
@@ -144,7 +144,7 @@ void feed_static(int fd,char *filename,int filesize)
 	char *srcp,filetype[MAXLINE],buf[MAXBUF];
 	get_filetype(filename,filetype);
 	sprintf(buf,"HTTP/1.0 200 OK\r\n");
-	sprintf(buf,"%sServer:weblet Web Server\r\n",buf);
+	sprintf(buf,"%sServer:webserver Web Server\r\n",buf);
 	sprintf(buf,"%sContent-length:%d\r\n",buf,filesize);
 	sprintf(buf,"%sContent-type:%s\r\n\r\n",buf,filetype);
 	rio_writen(fd,buf,strlen(buf));
@@ -161,7 +161,7 @@ void feed_dynamic(int fd,char *filename,char *cgiargs)
 	int pfd[2];
 	sprintf(buf,"HTTP/1.0 200 OK\r\n");
 	rio_writen(fd,buf,strlen(buf));
-	sprintf(buf,"Server:weblet Web Server\r\n");
+	sprintf(buf,"Server:webserver Web Server\r\n");
 	rio_writen(fd,buf,strlen(buf));
 
 	pipe(pfd);
