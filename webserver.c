@@ -13,7 +13,7 @@ void error_request(int fd,char *cause,char *errnum,char *shortmsg,char *descript
 int main(int argc,char **argv)
 {
 	int listen_sock,*conn_sock,port,clientlen;
-	pthread_t tid;
+	pthread_t tid;//create thread id
 	struct sockaddr_in clientaddr;
 	if(argc!=2){
 		fprintf(stderr,"usage: %s<port>\n",argv[0]);
@@ -27,10 +27,13 @@ int main(int argc,char **argv)
 		conn_sock = malloc(sizeof(int));
 		*conn_sock = accept(listen_sock,(SA *)&clientaddr,&clientlen);
 		pthread_create(&tid,NULL,process_trans,conn_sock);
+		process_trans(conn_sock);
+		pthread_detach(tid);//销毁子线程  
 	}
+	close(conn_sock);
 }
 
-void *process_trans(void *vargp)
+void *process_trans(void *vargp)//()
 {
 	int fd = *((int*)vargp);
 	int static_flag;
@@ -46,6 +49,7 @@ void *process_trans(void *vargp)
 	sscanf(buf,"%s%s%s",method,uri,version);
 	if(strcasecmp(method,"GET")){
 		error_request(fd,method,"501","NOT Implemented","weblet does not implement this method");
+		//return;
 	}
 	read_requesthdrs(&rio);
 
@@ -57,16 +61,19 @@ void *process_trans(void *vargp)
 	
 	if(stat(filename,&sbuf)<0){
 		error_request(fd,filename,"404","Not found","weblet could not find this file");
+		//return;
 	}
 
 	if(static_flag){
 		if(!(S_ISREG(sbuf.st_mode))||!(S_IRUSR & sbuf.st_mode)){
 			error_request(fd,filename,"403","Forbidden","weblet is not permtted to read the file");
+			//return;
 		}
 		feed_static(fd,filename,sbuf.st_size);
 	}else{
 		if(!(S_ISREG(sbuf.st_mode))||!(S_IXUSR & sbuf.st_mode)){
 			error_request(fd,filename,"403","Forbidden","weblet could not run the CGI program");
+			//return;
 		}
 		feed_dynamic(fd,filename,cgiargs);
 	}
@@ -119,23 +126,6 @@ void parse_static_uri(char *uri,char *filename)
 		strcat(filename,"test.html");
 }
 
-void feed_static(int fd,char *filename,int filesize)
-{
-	int srcfd;
-	char *srcp,filetype[MAXLINE],buf[MAXBUF];
-	get_filetype(filename,filetype);
-	sprintf(buf,"HTTP/1.0 200 OK\r\n");
-	sprintf(buf,"%sServer:weblet Web Server\r\n",buf);
-	sprintf(buf,"%sContent-length:%d\r\n",buf,filesize);
-	sprintf(buf,"%sContent-type:%s\r\n\r\n",buf,filetype);
-	rio_writen(fd,buf,strlen(buf));
-	srcfd=open(filename,O_RDONLY,0);
-	srcp=mmap(0,filesize,PROT_READ,MAP_PRIVATE,srcfd,0);
-	close(srcfd);
-	rio_writen(fd,srcp,filesize);
-	munmap(srcp,filesize);
-}
-
 void parse_dynamic_uri(char *uri,char *filename,char *cgiargs)
 {
 	char *ptr;
@@ -149,35 +139,48 @@ void parse_dynamic_uri(char *uri,char *filename,char *cgiargs)
 	strcat(filename,uri);
 }
 
+void feed_static(int fd,char *filename,int filesize)
+{
+	int srcfd;
+	char *srcp,filetype[MAXLINE],buf[MAXBUF];
+	get_filetype(filename,filetype);
+	sprintf(buf,"HTTP/1.0 200 OK\r\n");
+	sprintf(buf,"%sServer:weblet Web Server\r\n",buf);
+	sprintf(buf,"%sContent-length:%d\r\n",buf,filesize);
+	sprintf(buf,"%sContent-type:%s\r\n\r\n",buf,filetype);
+	rio_writen(fd,buf,strlen(buf));
+	srcfd=open(filename,O_RDONLY,0);
+	srcp=mmap(0,filesize,PROT_READ,MAP_PRIVATE,srcfd,0);
+	close(srcfd);	
+	rio_writen(fd,srcp,filesize);
+	munmap(srcp,filesize);
+}
+
+void feed_dynamic(int fd,char *filename,char *cgiargs)
+{
+	char buf[MAXLINE],*emptylist[]={NULL};	
+	int pfd[2];
+	sprintf(buf,"HTTP/1.0 200 OK\r\n");
+	rio_writen(fd,buf,strlen(buf));
+	sprintf(buf,"Server:weblet Web Server\r\n");
+	rio_writen(fd,buf,strlen(buf));
+
+	pipe(pfd);
+	if(fork()==0){
+		close(pfd[1]);
+		dup2(pfd[0],STDIN_FILENO);
+		dup2(fd,STDOUT_FILENO);
+		execve(filename,emptylist,environ);
+	}
+	close(pfd[0]);
+	write(pfd[1],cgiargs,strlen(cgiargs)+1);
+	wait(NULL);
+	close(pfd[1]);
+}
 void get_filetype(char *filename,char *filetype)
 {
 	if(strstr(filename,".html")) strcpy(filetype,"text/html");
 	else if (strstr(filename,".jpg")) strcpy(filetype,"image/jpeg");
 	else if (strstr(filename,".mpeg")) strcpy(filetype,"video/mpeg");
 	else strcpy(filetype,"text/html");
-}
-
-void feed_dynamic(int fd, char *filename, char *cgiargs) 
-{
-    char buf[MAXLINE], *emptylist[] = { NULL };
-    int pfd[2];
-
-    /* Return first part of HTTP response */
-    sprintf(buf, "HTTP/1.0 200 OK\r\n");
-    rio_writen(fd, buf, strlen(buf));
-    sprintf(buf, "Server: weblet Web Server\r\n");
-    rio_writen(fd, buf, strlen(buf));
- 
-    pipe(pfd);
-    if (fork() == 0) {             /* child */
-	close(pfd[1]);
-        dup2(pfd[0],STDIN_FILENO);
-	dup2(fd, STDOUT_FILENO);         /* Redirect stdout to client */
-	execve(filename, emptylist, environ);    /* Run CGI program */
-    }
-
-    close(pfd[0]);
-    write(pfd[1], cgiargs, strlen(cgiargs)+1);
-    wait(NULL);                          /* Parent waits for and reaps child */
-    close(pfd[1]);
 }
