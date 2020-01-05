@@ -22,15 +22,13 @@ int main(int argc,char **argv)
 	port=atoi(argv[1]);
 
 	listen_sock = open_listen_sock(port);
+	clientlen = sizeof(clientaddr);
 	while(1){
-		clientlen = sizeof(clientaddr);
+		
 		conn_sock = malloc(sizeof(int));
 		*conn_sock = accept(listen_sock,(SA *)&clientaddr,&clientlen);
 		pthread_create(&tid,NULL,process_trans,conn_sock);
-		process_trans(conn_sock);
-		pthread_detach(tid);//销毁子线程  
 	}
-	close(conn_sock);
 }
 
 void *process_trans(void *vargp)//()
@@ -47,12 +45,13 @@ void *process_trans(void *vargp)//()
 	rio_readinitb(&rio,fd);
 	rio_readlineb(&rio,buf,MAXLINE);
 	sscanf(buf,"%s%s%s",method,uri,version);
+	
 	if(strcasecmp(method,"GET")){
 		error_request(fd,method,"501","NOT Implemented","weblet does not implement this method");
 		//return;
 	}
+	
 	read_requesthdrs(&rio);
-
 	static_flag = is_static(uri);
 	if(static_flag)
 		parse_static_uri(uri,filename);
